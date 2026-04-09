@@ -109,3 +109,70 @@ class RadarrService:
         # This is an assumption - implementation may vary
         # Assuming 'watchlist' tag with ID 1 (adjust as needed)
         return 1 in (movie.tags or [])
+
+    def get_quality_profiles(self) -> dict:
+        """Fetch quality profiles from Radarr."""
+        response = requests.get(
+            f"{self.config.base_url}/qualityprofile",
+            params={"apikey": self.config.api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        profiles = response.json()
+        return {
+            "count": len(profiles),
+            "profiles": [{"id": p["id"], "name": p["name"]} for p in profiles],
+        }
+
+    def get_root_folders(self) -> dict:
+        """Fetch root folders from Radarr."""
+        response = requests.get(
+            f"{self.config.base_url}/rootfolder",
+            params={"apikey": self.config.api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        folders = response.json()
+        return {
+            "count": len(folders),
+            "folders": [{"id": f["id"], "path": f["path"], "freeSpace": f.get("freeSpace")} for f in folders],
+        }
+
+    def add_movie(
+        self,
+        tmdb_id: int,
+        quality_profile_id: int,
+        root_folder_path: str = "/mnt/media/movies",
+        search_on_add: bool = True,
+        monitored: bool = True,
+    ) -> dict:
+        """Add a movie to Radarr by TMDB ID."""
+        results = self.lookup_movie(f"tmdb:{tmdb_id}")
+        if not results:
+            raise Exception(f"No movie found with TMDB ID {tmdb_id}")
+        movie = results[0]
+
+        payload = {
+            "tmdbId": tmdb_id,
+            "title": movie.title,
+            "year": movie.year,
+            "qualityProfileId": quality_profile_id,
+            "rootFolderPath": root_folder_path,
+            "monitored": monitored,
+            "addOptions": {
+                "searchForMovie": search_on_add,
+            },
+        }
+        response = requests.post(
+            f"{self.config.base_url}/movie",
+            params={"apikey": self.config.api_key},
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code == 400:
+            err = response.json()
+            raise Exception(f"Radarr error: {err}")
+        response.raise_for_status()
+        added = response.json()
+        return {"id": added.get("id"), "title": added.get("title"), "status": "added"}
+

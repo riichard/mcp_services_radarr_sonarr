@@ -47,7 +47,7 @@ class Series:
             statistics = Statistics.from_dict(data['statistics'])
         
         return cls(
-            id=data['id'],
+            id=data.get('id', 0),
             title=data['title'],
             year=data.get('year'),
             overview=data.get('overview', ''),
@@ -79,7 +79,7 @@ class Episode:
     def from_dict(cls, data: Dict[str, Any]) -> 'Episode':
         """Create an Episode object from a dictionary."""
         return cls(
-            id=data['id'],
+            id=data.get('id', 0),
             series_id=data['seriesId'],
             episode_file_id=data.get('episodeFileId'),
             season_number=data['seasonNumber'],
@@ -176,3 +176,74 @@ class SonarrService:
         # This is an assumption - implementation may vary
         # Assuming 'watchlist' tag with ID 1 (adjust as needed)
         return 1 in (series.tags or [])
+
+    def get_quality_profiles(self) -> dict:
+        """Fetch quality profiles from Sonarr."""
+        response = requests.get(
+            f"{self.config.base_url}/qualityprofile",
+            params={"apikey": self.config.api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        profiles = response.json()
+        return {
+            "count": len(profiles),
+            "profiles": [{"id": p["id"], "name": p["name"]} for p in profiles],
+        }
+
+    def get_root_folders(self) -> dict:
+        """Fetch root folders from Sonarr."""
+        response = requests.get(
+            f"{self.config.base_url}/rootfolder",
+            params={"apikey": self.config.api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        folders = response.json()
+        return {
+            "count": len(folders),
+            "folders": [{"id": f["id"], "path": f["path"], "freeSpace": f.get("freeSpace")} for f in folders],
+        }
+
+    def add_series(
+        self,
+        tvdb_id: int,
+        quality_profile_id: int,
+        root_folder_path: str = "/mnt/media/tv",
+        search_on_add: bool = True,
+        monitored: bool = True,
+    ) -> dict:
+        """Add a series to Sonarr by TVDB ID."""
+        # First look up the series to get full metadata and seasons
+        results = self.lookup_series(f"tvdb:{tvdb_id}")
+        if not results:
+            raise Exception(f"No series found with TVDB ID {tvdb_id}")
+        series = results[0]
+
+        payload = {
+            "tvdbId": tvdb_id,
+            "title": series.title,
+            "qualityProfileId": quality_profile_id,
+            "rootFolderPath": root_folder_path,
+            "seasonFolder": True,
+            "monitored": monitored,
+            "seriesType": "standard",
+            "seasons": series.data.get("seasons", []),
+            "addOptions": {
+                "searchForMissingEpisodes": search_on_add,
+                "monitor": "all",
+            },
+        }
+        response = requests.post(
+            f"{self.config.base_url}/series",
+            params={"apikey": self.config.api_key},
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code == 400:
+            err = response.json()
+            raise Exception(f"Sonarr error: {err}")
+        response.raise_for_status()
+        added = response.json()
+        return {"id": added.get("id"), "title": added.get("title"), "status": "added"}
+
