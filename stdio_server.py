@@ -5,9 +5,10 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
+import urllib.parse
 from typing import Any
 
-import requests
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
@@ -21,20 +22,32 @@ RADARR_KEY = os.environ["RADARR_API_KEY"]
 SONARR_KEY = os.environ["SONARR_API_KEY"]
 
 
-def radarr(path: str, method="GET", **kwargs) -> Any:
-    params = kwargs.pop("params", {})
-    params["apikey"] = RADARR_KEY
-    r = requests.request(method, f"{RADARR_URL}{path}", params=params, timeout=30, **kwargs)
-    r.raise_for_status()
-    return r.json()
+def _curl(method: str, url: str, params: dict = None, body: dict = None) -> Any:
+    """Make HTTP request via curl (bypasses macOS socket routing issues)."""
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    cmd = ["curl", "-s", "-X", method, url]
+    if body is not None:
+        cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(body)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise Exception(f"curl failed: {result.stderr}")
+    data = json.loads(result.stdout)
+    if isinstance(data, list) and len(data) and isinstance(data[0], dict) and "errorMessage" in data[0]:
+        raise Exception(f"API error: {data[0]['errorMessage']}")
+    return data
 
 
-def sonarr(path: str, method="GET", **kwargs) -> Any:
-    params = kwargs.pop("params", {})
-    params["apikey"] = SONARR_KEY
-    r = requests.request(method, f"{SONARR_URL}{path}", params=params, timeout=30, **kwargs)
-    r.raise_for_status()
-    return r.json()
+def radarr(path: str, method="GET", params=None, json=None) -> Any:
+    p = dict(params or {})
+    p["apikey"] = RADARR_KEY
+    return _curl(method, f"{RADARR_URL}{path}", params=p, body=json)
+
+
+def sonarr(path: str, method="GET", params=None, json=None) -> Any:
+    p = dict(params or {})
+    p["apikey"] = SONARR_KEY
+    return _curl(method, f"{SONARR_URL}{path}", params=p, body=json)
 
 
 server = Server("radarr-sonarr-mcp")
