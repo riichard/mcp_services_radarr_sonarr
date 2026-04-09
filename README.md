@@ -1,191 +1,106 @@
 # Radarr and Sonarr MCP Server
 
-A Python-based Model Context Protocol (MCP) server that provides AI assistants like Claude with access to your Radarr (movies) and Sonarr (TV series) data.
+A Python-based Model Context Protocol (MCP) server that gives Claude direct access to your Radarr (movies) and Sonarr (TV series) — browse, search, and add content without leaving your conversation.
 
-## Overview
-
-This MCP server allows AI assistants to query your movie and TV show collection via Radarr and Sonarr APIs. Built with FastMCP, it implements the standardized protocol for AI context that Claude Desktop and other MCP-compatible clients can use.
+> Fork of [BerryKuipers/mcp_services_radarr_sonarr](https://github.com/BerryKuipers/mcp_services_radarr_sonarr) with FastMCP v3 compatibility fixes, missing `config.py`, and new tools for adding content and managing quality profiles.
 
 ## Features
 
-- **Native MCP Implementation**: Built with FastMCP for seamless AI integration
-- **Radarr Integration**: Access your movie collection
-- **Sonarr Integration**: Access your TV show and episode data
-- **Rich Filtering**: Filter by year, watched status, actors, and more
-- **Claude Desktop Compatible**: Works seamlessly with Claude's MCP client
-- **Easy Setup**: Interactive configuration wizard
-- **Well-tested**: Comprehensive test suite for reliability
+- Browse your movie and TV library with filters (year, downloaded status)
+- Search TMDB/TVDB for new content
+- Add movies and series directly from Claude, with quality profile selection
+- List and manage quality profiles and root folders
 
-## Installation
+## Quick Start (Claude Code — stdio)
 
-### From Source
+This is the recommended setup. Claude Code spawns the server as a subprocess — no ports, no network transport issues.
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/radarr-sonarr-mcp.git
-   cd radarr-sonarr-mcp-python
-   ```
-
-2. Install the package:
-   ```bash
-   pip install -e .
-   ```
-
-### Using pip (coming soon)
+**1. Clone and install**
 
 ```bash
-pip install radarr-sonarr-mcp
+git clone https://github.com/riichard/mcp_services_radarr_sonarr ~/dev/mcp-radarr-sonarr
+cd ~/dev/mcp-radarr-sonarr
+python3 -m venv .venv
+.venv/bin/pip install -e . mcp
 ```
 
-## Quick Start
+**2. Find your API keys**
 
-1. Configure the server:
-   ```bash
-   radarr-sonarr-mcp configure
-   ```
-   Follow the prompts to enter your Radarr/Sonarr API keys and other settings.
+In Radarr: Settings → General → API Key
+In Sonarr: Settings → General → API Key
 
-2. Start the server:
-   ```bash
-   radarr-sonarr-mcp start
-   ```
+**3. Register with Claude Code**
 
-3. Connect Claude Desktop:
-   - In Claude Desktop, go to Settings > MCP Servers
-   - Add a new server with URL: `http://localhost:3000` (or your configured port)
-
-## Configuration
-
-The configuration wizard will guide you through setting up:
-
-- NAS/Server IP address
-- Radarr API key and port
-- Sonarr API key and port
-- MCP server port
-
-You can also manually edit the `config.json` file:
-
-```json
-{
-  "nasConfig": {
-    "ip": "10.0.0.23",
-    "port": "7878"
-  },
-  "radarrConfig": {
-    "apiKey": "YOUR_RADARR_API_KEY",
-    "basePath": "/api/v3",
-    "port": "7878"
-  },
-  "sonarrConfig": {
-    "apiKey": "YOUR_SONARR_API_KEY",
-    "basePath": "/api/v3",
-    "port": "8989"
-  },
-  "server": {
-    "port": 3000
-  }
-}
+```bash
+claude mcp add radarr-sonarr \
+  --scope user \
+  -e NAS_IP=192.168.1.100 \
+  -e RADARR_API_KEY=your_radarr_key \
+  -e RADARR_PORT=7878 \
+  -e SONARR_API_KEY=your_sonarr_key \
+  -e SONARR_PORT=8989 \
+  -- ~/dev/mcp-radarr-sonarr/.venv/bin/python ~/dev/mcp-radarr-sonarr/stdio_server.py
 ```
 
-## Available MCP Tools
+Replace `192.168.1.100` with your server's IP and fill in your API keys.
 
-This server provides the following tools to Claude:
+That's it — restart Claude Code and start asking.
+
+## Available Tools
 
 ### Movies
-- `get_available_movies` - Get a list of movies with optional filters
-- `lookup_movie` - Search for a movie by title
-- `get_movie_details` - Get detailed information about a specific movie
+| Tool | Description |
+|------|-------------|
+| `get_available_movies` | List your library, optionally filtered by `year` or `downloaded` |
+| `lookup_movie` | Search TMDB for a movie by title |
+| `add_movie` | Add a movie by TMDB ID with a chosen quality profile |
+| `get_radarr_quality_profiles` | List available quality profiles |
+| `get_radarr_root_folders` | List configured root folders |
 
-### Series
-- `get_available_series` - Get a list of TV series with optional filters
-- `lookup_series` - Search for a TV series by title
-- `get_series_details` - Get detailed information about a specific series
-- `get_series_episodes` - Get episodes for a specific series
+### TV Series
+| Tool | Description |
+|------|-------------|
+| `get_available_series` | List your library, optionally filtered by `year` or `downloaded` |
+| `lookup_series` | Search TVDB for a series by title |
+| `add_series` | Add a series by TVDB ID with a chosen quality profile |
+| `get_series_episodes` | List episodes for a series by Sonarr ID |
+| `get_sonarr_quality_profiles` | List available quality profiles |
+| `get_sonarr_root_folders` | List configured root folders |
 
-### Resources
+## Example Prompts
 
-The server also provides standard MCP resources:
-
-- `/movies` - Browse all available movies
-- `/series` - Browse all available TV series
-
-### Filtering Options
-
-Most tools support various filtering options:
-
-- `year` - Filter by release year
-- `watched` - Filter by watched status (true/false)
-- `downloaded` - Filter by download status (true/false)
-- `watchlist` - Filter by watchlist status (true/false)
-- `actors` - Filter by actor/cast name
-- `actresses` - Filter by actress name (movies only)
-
-## Example Queries for Claude
-
-Once your MCP server is connected to Claude Desktop, you can ask questions like:
-
-- "What sci-fi movies from 2023 do I have?"
-- "Show me TV shows starring Pedro Pascal"
-- "Do I have any unwatched episodes of The Mandalorian?"
-- "Find movies with Tom Hanks that I haven't watched yet"
-- "How many episodes of Stranger Things do I have downloaded?"
-
-## Finding API Keys
-
-### Radarr API Key
-1. Open Radarr in your browser
-2. Go to Settings > General
-3. Find the "API Key" section
-4. Copy the API Key
-
-### Sonarr API Key
-1. Open Sonarr in your browser  
-2. Go to Settings > General
-3. Find the "API Key" section
-4. Copy the API Key
-
-## Command-Line Interface
-
-The package provides a command-line interface:
-
-- `radarr-sonarr-mcp configure` - Run configuration wizard
-- `radarr-sonarr-mcp start` - Start the MCP server
-- `radarr-sonarr-mcp status` - Show the current configuration
-
-## Development
-
-### Running Tests
-
-To run the test suite:
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=radarr_sonarr_mcp
+```
+What sci-fi movies from 2023 do I have downloaded?
+Look up The Mandalorian and add it with my 1080p x265 profile.
+What TV shows do I have that aren't fully downloaded yet?
+Add Dune Part Two — use whatever my best quality profile is.
+How many episodes of Stranger Things do I have?
 ```
 
-### Local Development
+## Shared Server (optional)
 
-For quick development and testing:
+If multiple people on your LAN want to use the same server (e.g. a shared NAS), you can run `stdio_server.py` as a network-accessible SSE server on the NAS instead. See the `run.py` entrypoint and configure it as a systemd service. Each client then connects via:
 
 ```bash
-# Run directly without installation
-python run.py
+claude mcp add --transport sse --scope user radarr-sonarr http://your-nas-ip:3000/sse
 ```
+
+Note: SSE transport compatibility with Claude Code varies by FastMCP version. The stdio approach above is more reliable.
 
 ## Requirements
 
-- Python 3.7+
-- FastMCP
-- Requests
-- Pydantic
+- Python 3.9+
+- `mcp` package (official MCP SDK)
+- `requests`
+- Radarr and/or Sonarr running on your network
 
-## Notes
+## Changes from upstream
 
-- The watched/watchlist status functionality assumes these are tracked using specific mechanisms in Radarr/Sonarr. You may need to adapt this to your specific setup.
-- For security reasons, it's recommended to run this server only on your local network.
+- Added missing `config.py` module (upstream never committed it)
+- Fixed FastMCP v3 breaking changes (removed unsupported `description` kwarg, transport compatibility)
+- Fixed `Series.from_dict` crash on lookup results (missing `id` field before adding to library)
+- Fixed all `Movie`/`Series` dataclass attribute access (upstream used dict `.get()` on typed objects)
+- Fixed `is_series_watched` called with `str` instead of `Series` object
+- Added `add_series`, `add_movie` tools
+- Added `get_quality_profiles`, `get_root_folders` for both Radarr and Sonarr
+- Added `stdio_server.py` — a self-contained stdio server using the official MCP SDK
